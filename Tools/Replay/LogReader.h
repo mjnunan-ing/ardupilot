@@ -1,76 +1,41 @@
+#pragma once
 
-enum log_messages {
-    // plane specific messages
-    LOG_PLANE_ATTITUDE_MSG = 9,
-    LOG_PLANE_COMPASS_MSG  = 11,
-    LOG_PLANE_COMPASS2_MSG  = 15,
-    LOG_PLANE_AIRSPEED_MSG  = 17,
+#include "VehicleType.h"
+#include "DataFlashFileReader.h"
+#include "LR_MsgHandler.h"
+#include "Parameters.h"
 
-    // copter specific messages
-    LOG_COPTER_ATTITUDE_MSG = 1,
-    LOG_COPTER_COMPASS_MSG  = 15,
-    LOG_COPTER_NAV_TUNING_MSG = 5,
-
-    // rover specific messages
-    LOG_ROVER_ATTITUDE_MSG = 8,
-    LOG_ROVER_COMPASS_MSG  = 10,
-};
-
-
-class LogReader 
+class LogReader : public AP_LoggerFileReader
 {
 public:
-    LogReader(AP_AHRS &_ahrs, AP_InertialSensor &_ins, AP_Baro &_baro, Compass &_compass, AP_GPS &_gps, AP_Airspeed &_airspeed, DataFlash_Class &_dataflash);
-    bool open_log(const char *logfile);
-    bool update(uint8_t &type);
-    bool wait_type(uint8_t type);
+    LogReader(struct LogStructure *log_structure, NavEKF2 &_ekf, NavEKF3 &_ekf3);
 
-    const Vector3f &get_attitude(void) const { return attitude; }
-    const Vector3f &get_ahr2_attitude(void) const { return ahr2_attitude; }
-    const Vector3f &get_inavpos(void) const { return inavpos; }
-    const Vector3f &get_sim_attitude(void) const { return sim_attitude; }
-    const float &get_relalt(void) const { return rel_altitude; }
+    VehicleType::vehicle_type vehicle;
 
-    enum vehicle_type { VEHICLE_UNKNOWN, VEHICLE_COPTER, VEHICLE_PLANE, VEHICLE_ROVER };
+    static bool check_user_param(const char *name);
+    static bool set_parameter(const char *name, float value, bool force=false);
 
-    vehicle_type vehicle;
+    bool handle_log_format_msg(const struct log_Format &f) override;
+    bool handle_msg(const struct log_Format &f, uint8_t *msg) override;
 
-    bool set_parameter(const char *name, float value);
+    static bool in_list(const char *type, const char *list[]);
 
-    void set_accel_mask(uint8_t mask) { accel_mask = mask; }
-    void set_gyro_mask(uint8_t mask) { gyro_mask = mask; }
-
-    uint64_t last_timestamp_us(void) const { return last_timestamp_usec; }
+protected:
 
 private:
-    int fd;
-    AP_AHRS &ahrs;
-    AP_InertialSensor &ins;
-    AP_Baro &baro;
-    Compass &compass;
-    AP_GPS &gps;
-    AP_Airspeed &airspeed;
-    DataFlash_Class &dataflash;
 
-    uint8_t accel_mask;
-    uint8_t gyro_mask;
+    NavEKF2 &ekf2;
+    NavEKF3 &ekf3;
 
-    uint32_t ground_alt_cm;
+    struct LogStructure *_log_structure;
+    uint8_t _log_structure_count;
 
-#define LOGREADER_MAX_FORMATS 100
-    uint8_t num_formats;
-    struct log_Format formats[LOGREADER_MAX_FORMATS];
-
-    Vector3f attitude;
-    Vector3f ahr2_attitude;
-    Vector3f sim_attitude;
-    Vector3f inavpos;
-    float rel_altitude;
-    uint64_t last_timestamp_usec;
-
-    void wait_timestamp(uint32_t timestamp);
-
-    void process_plane(uint8_t type, uint8_t *data, uint16_t length);
-    void process_copter(uint8_t type, uint8_t *data, uint16_t length);
-    void process_rover(uint8_t type, uint8_t *data, uint16_t length);
+    class LR_MsgHandler *msgparser[LOGREADER_MAX_FORMATS] {};
 };
+
+// some vars are difficult to get through the layers
+struct globals {
+    bool no_params;
+};
+
+extern struct globals globals;
